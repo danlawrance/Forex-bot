@@ -53,6 +53,26 @@ function logToCSV(data) {
   }
 }
 
+// Parse top 5 pairs from environment
+function parseTop5Pairs() {
+  const bullish = (ENV.TOP_5_BULLISH || '').split(',').map(p => p.trim().toUpperCase()).filter(p => p);
+  const bearish = (ENV.TOP_5_BEARISH || '').split(',').map(p => p.trim().toUpperCase()).filter(p => p);
+  return { bullish, bearish };
+}
+
+// Check if pair is in top 5
+function isTop5Pair(pair, bias) {
+  const { bullish, bearish } = parseTop5Pairs();
+  const normalizedPair = pair.toUpperCase().replace(' ', '');
+
+  if (bias === 'BULLISH') {
+    return bullish.some(p => p.replace(' ', '') === normalizedPair);
+  } else if (bias === 'BEARISH') {
+    return bearish.some(p => p.replace(' ', '') === normalizedPair);
+  }
+  return false;
+}
+
 // Send Discord notification
 async function sendDiscordNotification(data) {
   const webhook = ENV.DISCORD_WEBHOOK;
@@ -63,16 +83,39 @@ async function sendDiscordNotification(data) {
   }
 
   const url = new URL(webhook);
-  const statusColor = data.signal === 'LONG' ? 3066993 : 15158332; // Green for LONG, Red for SHORT
+  const isTop5 = isTop5Pair(data.pair, data.bias);
+
+  // Color coding:
+  // Top 5 BULLISH: Bright Green (65280)
+  // Top 5 BEARISH: Bright Red (16711680)
+  // Regular LONG: Light Green (3066993)
+  // Regular SHORT: Light Red (15158332)
+  // Below minimum: Gray (9807270)
+
+  let statusColor;
+  if (!data.meets_minimum) {
+    statusColor = 9807270; // Gray
+  } else if (data.signal === 'LONG') {
+    statusColor = isTop5 ? 65280 : 3066993; // Bright or light green
+  } else {
+    statusColor = isTop5 ? 16711680 : 15158332; // Bright or light red
+  }
+
   const statusText = data.meets_minimum ? '✅ MEETS RATIO' : '❌ BELOW MINIMUM';
+  const priorityBadge = isTop5 ? '⭐ **TOP 5 PRIORITY**' : '⚪ Standard Entry';
 
   const embed = {
-    title: `${data.pair} ${data.signal}`,
+    title: `${isTop5 ? '⭐ ' : ''}${data.pair} ${data.signal}`,
     description: `**Bias:** ${data.bias}\n**Price:** ${data.close_price}\n**RSI:** ${data.rsi}`,
     fields: [
       {
+        name: 'Priority',
+        value: priorityBadge,
+        inline: false
+      },
+      {
         name: 'Risk/Reward Ratio',
-        value: `${data.ratio.toFixed(2)}:1 (Required: ${ENV.MINIMUM_RR || '1:3'}+)`,
+        value: `${data.ratio.toFixed(2)}:1 (Required: ${ENV.MINIMUM_RR || '2'}:1)`,
         inline: false
       },
       {
@@ -142,6 +185,12 @@ async function handleAlert(alert) {
   if (!alert.pair || !alert.signal || !alert.bias || alert.rsi === undefined || !alert.close) {
     console.error('Invalid alert payload. Required fields: pair, signal, bias, rsi, close');
     return { success: false, error: 'Invalid payload' };
+  }
+
+  // Check if pair is in Top 5 (NEW FILTER)
+  if (!isTop5Pair(alert.pair, alert.bias)) {
+    console.warn(`⚠️  Alert rejected: ${alert.pair} ${alert.bias} is NOT in current Top 5 list`);
+    return { success: false, error: `${alert.pair} not in Top 5 ${alert.bias} pairs` };
   }
 
   const timestamp = new Date().toISOString();
@@ -243,6 +292,28 @@ const server = http.createServer(async (req, res) => {
   } else if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'running' }));
+  } else if (req.url === '/api/alerts') {
+    // Read CSV and convert to JSON
+    try {
+      const content = fs.readFileSync(CSV_PATH, 'utf-8');
+      const lines = content.trim().split('\n');
+      const headers = lines[0].split(',');
+
+      const alerts = lines.slice(1).map(line => {
+        const values = line.split(',');
+        const obj = {};
+        headers.forEach((header, idx) => {
+          obj[header.trim()] = values[idx] ? values[idx].trim() : '';
+        });
+        return obj;
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(alerts.reverse())); // Most recent first
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to read alerts' }));
+    }
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
@@ -252,10 +323,15 @@ const server = http.createServer(async (req, res) => {
 // Start server
 initializeCSV();
 server.listen(PORT, () => {
+  const { bullish, bearish } = parseTop5Pairs();
   console.log(`✅ Entry Bot running on port ${PORT}`);
   console.log(`📊 CSV log: ${CSV_PATH}`);
-  console.log(`🤖 Minimum RR ratio: 1:${ENV.MINIMUM_RR || '3'}`);
+  console.log(`🤖 Minimum RR ratio: 1:${ENV.MINIMUM_RR || '2'}`);
   console.log(`💬 Discord webhook: ${ENV.DISCORD_WEBHOOK ? 'configured' : 'NOT configured'}`);
+  if (bullish.length > 0 || bearish.length > 0) {
+    console.log(`⭐ Top 5 Bullish: ${bullish.length > 0 ? bullish.join(', ') : 'None set'}`);
+    console.log(`⭐ Top 5 Bearish: ${bearish.length > 0 ? bearish.join(', ') : 'None set'}`);
+  }
   console.log(`\n🔗 Webhook URL for TradingView: http://localhost:${PORT}/alert`);
   console.log(`❤️  Health check: http://localhost:${PORT}/health`);
 });
