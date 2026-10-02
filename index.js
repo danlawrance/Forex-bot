@@ -28,7 +28,7 @@ function loadEnv() {
 // Initialize CSV file with headers if it doesn't exist
 function initializeCSV() {
   if (!fs.existsSync(CSV_PATH)) {
-    const headers = 'timestamp,pair,signal,bias,rsi,close_price,risk_pips,profit_pips,ratio,meets_minimum,status\n';
+    const headers = 'timestamp,pair,signal,bias,rsi,close_price,entry_price,stop_loss,take_profit,risk_pips,profit_pips,ratio,meets_minimum,status\n';
     fs.writeFileSync(CSV_PATH, headers, 'utf-8');
   }
 }
@@ -44,7 +44,7 @@ function calculateRiskReward(entry, stop, tp) {
 
 // Log entry to CSV
 function logToCSV(data) {
-  const line = `${data.timestamp},${data.pair},${data.signal},${data.bias},${data.rsi},${data.close_price},${data.risk_pips},${data.profit_pips},${data.ratio.toFixed(2)},${data.meets_minimum},${data.status}\n`;
+  const line = `${data.timestamp},${data.pair},${data.signal},${data.bias},${data.rsi},${data.close_price},${data.entry_price},${data.stop_loss},${data.take_profit},${data.risk_pips},${data.profit_pips},${data.ratio.toFixed(2)},${data.meets_minimum},${data.status}\n`;
 
   try {
     fs.appendFileSync(CSV_PATH, line, 'utf-8');
@@ -231,6 +231,9 @@ async function handleAlert(alert) {
     bias: alert.bias,
     rsi: alert.rsi,
     close_price: alert.close,
+    entry_price: alert.entry || alert.close,
+    stop_loss: stop_loss || '',
+    take_profit: take_profit || '',
     risk_pips: riskPips,
     profit_pips: profitPips,
     ratio,
