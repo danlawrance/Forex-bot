@@ -1,0 +1,20 @@
+{
+  "name": "macrobias-entry-bot",
+  "version": "1.0.0",
+  "description": "Automated forex entry bot with risk/reward ratio filtering",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": [
+    "forex",
+    "trading",
+    "bot",
+    "entry",
+    "risk-management"
+  ],
+  "author": "danlawrance@hotmail.co.uk",
+  "license": "MIT"
+}

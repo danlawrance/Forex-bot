@@ -1,0 +1,53 @@
+//@version=5
+indicator("MACROBIAS Entry Scanner with RR", overlay=true)
+
+// Input parameters
+ema_fast = input(20, "Fast EMA")
+ema_slow = input(50, "Slow EMA")
+ema_entry = input(5, "Entry EMA")
+rsi_period = input(14, "RSI Period")
+rsi_overbought = input(70, "RSI Overbought")
+rsi_oversold = input(30, "RSI Oversold")
+volume_multiplier = input(1.2, "Volume Multiplier")
+lookback_bars = input(20, "Lookback for Support/Resistance")
+
+// Calculate indicators
+ema20 = ta.ema(close, ema_fast)
+ema50 = ta.ema(close, ema_slow)
+ema5 = ta.ema(close, ema_entry)
+rsi = ta.rsi(close, rsi_period)
+avg_volume = ta.sma(volume, lookback_bars)
+
+// Find recent support and resistance levels
+highest = ta.highest(high, lookback_bars)
+lowest = ta.lowest(low, lookback_bars)
+
+// === BULLISH SETUP ===
+bullish_trend = (close > ema20) and (ema20 > ema50) and (rsi < rsi_overbought)
+bullish_entry = close > ema20 and ta.crossover(close, highest * 0.995) and (volume > avg_volume * volume_multiplier)
+
+// === BEARISH SETUP ===
+bearish_trend = (close < ema20) and (ema20 < ema50) and (rsi > rsi_oversold)
+bearish_entry = close < ema20 and ta.crossunder(close, lowest * 1.005) and (volume > avg_volume * volume_multiplier)
+
+// Calculate SL and TP levels (estimate based on recent levels)
+// In production, replace these with your actual technical levels
+bullish_sl = lowest * 0.998  // Slightly below recent low
+bullish_tp = highest * 1.002  // Slightly above recent high
+
+bearish_sl = highest * 1.002  // Slightly above recent high
+bearish_tp = lowest * 0.998   // Slightly below recent low
+
+// === ALERTS ===
+if bullish_trend and bullish_entry
+    alert('{"pair": "' + syminfo.tickerid + '", "signal": "LONG", "bias": "BULLISH", "rsi": ' + str.tostring(rsi, "#.##") + ', "close": ' + str.tostring(close, "#.#####") + ', "stop_loss": ' + str.tostring(bullish_sl, "#.#####") + ', "take_profit": ' + str.tostring(bullish_tp, "#.#####") + '}', alert.freq_once_per_candle)
+
+if bearish_trend and bearish_entry
+    alert('{"pair": "' + syminfo.tickerid + '", "signal": "SHORT", "bias": "BEARISH", "rsi": ' + str.tostring(rsi, "#.##") + ', "close": ' + str.tostring(close, "#.#####") + ', "stop_loss": ' + str.tostring(bearish_sl, "#.#####") + ', "take_profit": ' + str.tostring(bearish_tp, "#.#####") + '}', alert.freq_once_per_candle)
+
+// === PLOT ===
+plot(ema20, "EMA 20", color.blue, linewidth=1)
+plot(ema50, "EMA 50", color.orange, linewidth=1)
+
+plotshape(bullish_entry and bullish_trend, title="Bullish Entry", location=location.belowbar, color=color.new(color.green, 0), size=size.small, shape=shape.labelup, text="BUY")
+plotshape(bearish_entry and bearish_trend, title="Bearish Entry", location=location.abovebar, color=color.new(color.red, 0), size=size.small, shape=shape.labeldown, text="SELL")
