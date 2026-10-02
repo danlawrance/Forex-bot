@@ -182,8 +182,10 @@ function parseAlert(body) {
 
 // Handle incoming alert
 async function handleAlert(alert) {
+  console.log('📥 Received alert:', JSON.stringify(alert));
+
   if (!alert.pair || !alert.signal || !alert.bias || alert.rsi === undefined || !alert.close) {
-    console.error('Invalid alert payload. Required fields: pair, signal, bias, rsi, close');
+    console.error('❌ Invalid alert payload. Received:', JSON.stringify(alert));
     return { success: false, error: 'Invalid payload' };
   }
 
@@ -259,6 +261,478 @@ async function handleAlert(alert) {
   };
 }
 
+// Dashboard HTML
+const DASHBOARD_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MACROBIAS Entry Bot Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #00d4ff;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9em;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #00ff00;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid #00d4ff;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #00ff88;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #00d4ff;
+            text-transform: uppercase;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            border: none;
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        select {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid #00d4ff;
+            color: #e0e0e0;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .entries-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        thead {
+            background: rgba(0, 212, 255, 0.15);
+            border-bottom: 2px solid #00d4ff;
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: bold;
+            color: #00d4ff;
+            text-transform: uppercase;
+            font-size: 0.85em;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        tbody tr {
+            transition: background-color 0.3s;
+        }
+
+        tbody tr:hover {
+            background-color: rgba(0, 212, 255, 0.1);
+        }
+
+        .top5-bullish {
+            background: rgba(0, 255, 0, 0.15);
+            border-left: 4px solid #00ff00;
+        }
+
+        .top5-bearish {
+            background: rgba(255, 0, 0, 0.15);
+            border-left: 4px solid #ff0000;
+        }
+
+        .standard-long {
+            background: rgba(100, 200, 100, 0.1);
+            border-left: 4px solid #64c864;
+        }
+
+        .standard-short {
+            background: rgba(200, 100, 100, 0.1);
+            border-left: 4px solid #c86464;
+        }
+
+        .below-minimum {
+            background: rgba(128, 128, 128, 0.1);
+            border-left: 4px solid #808080;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .badge-top5 {
+            background: #00ff00;
+            color: #000;
+        }
+
+        .badge-long {
+            background: #00aa44;
+            color: #fff;
+        }
+
+        .badge-short {
+            background: #cc3333;
+            color: #fff;
+        }
+
+        .badge-ok {
+            background: #00ff88;
+            color: #000;
+        }
+
+        .badge-fail {
+            background: #ff4444;
+            color: #fff;
+        }
+
+        .ratio-highlight {
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .pair-name {
+            font-weight: bold;
+            color: #00d4ff;
+            font-size: 1.1em;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .refresh-timer {
+            font-size: 0.85em;
+            color: #999;
+            margin-top: 15px;
+        }
+
+        .last-updated {
+            text-align: right;
+            font-size: 0.85em;
+            color: #00d4ff;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>🤖 MACROBIAS Entry Bot</h1>
+                <p style="color: #999; margin-top: 5px;">Real-time Alert Monitor & Risk/Reward Filter</p>
+            </div>
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span>Live Monitoring</span>
+            </div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalAlerts">0</div>
+                <div class="stat-label">Total Alerts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="meetsMinimum">0</div>
+                <div class="stat-label">Meets Min RR</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="top5Count">0</div>
+                <div class="stat-label">Top 5 Priority</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="minRR">2.00</div>
+                <div class="stat-label">Minimum Ratio</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button onclick="refreshData()">🔄 Refresh Now</button>
+            <div class="filter-group">
+                <label for="filterSignal">Filter:</label>
+                <select id="filterSignal" onchange="filterTable()">
+                    <option value="">All Signals</option>
+                    <option value="LONG">LONG Only</option>
+                    <option value="SHORT">SHORT Only</option>
+                </select>
+                <select id="filterStatus" onchange="filterTable()">
+                    <option value="">All Status</option>
+                    <option value="YES">Meets Minimum Only</option>
+                    <option value="NO">Below Minimum Only</option>
+                </select>
+            </div>
+        </div>
+
+        <table class="entries-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Pair</th>
+                    <th>Signal</th>
+                    <th>Bias</th>
+                    <th>Entry</th>
+                    <th>SL</th>
+                    <th>TP</th>
+                    <th>Ratio</th>
+                    <th>Status</th>
+                    <th>Priority</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="11" style="text-align: center; padding: 40px; color: #666;">Loading...</td></tr>
+            </tbody>
+        </table>
+
+        <div class="refresh-timer">
+            ⏱️ Auto-refreshing every 5 seconds | Last updated: <span id="lastUpdate">--:--:--</span>
+        </div>
+        <div class="last-updated" id="totalEntries"></div>
+    </div>
+
+    <script>
+        const TOP_5_BULLISH = ['USD/CAD', 'USD/CHF', 'CAD/CHF', 'AUD/CHF', 'GBP/CHF'];
+        const TOP_5_BEARISH = ['GBP/JPY', 'AUD/JPY', 'NZD/JPY', 'EUR/USD', 'GBP/USD'];
+
+        let allData = [];
+
+        async function refreshData() {
+            try {
+                const response = await fetch('/api/alerts');
+                if (response.ok) {
+                    allData = await response.json();
+                    updateStats();
+                    renderTable();
+                    updateTimestamp();
+                }
+            } catch (error) {
+                console.error('Failed to fetch data:', error);
+                loadLocalData();
+            }
+        }
+
+        function loadLocalData() {
+            allData = [];
+            updateStats();
+            renderTable();
+            updateTimestamp();
+        }
+
+        function updateStats() {
+            document.getElementById('totalAlerts').textContent = allData.length;
+            document.getElementById('meetsMinimum').textContent = allData.filter(d => d.meets_minimum === 'YES').length;
+
+            let top5Count = 0;
+            allData.forEach(d => {
+                const isTop5 = (d.signal === 'LONG' && TOP_5_BULLISH.includes(d.pair)) ||
+                               (d.signal === 'SHORT' && TOP_5_BEARISH.includes(d.pair));
+                if (isTop5 && d.meets_minimum === 'YES') top5Count++;
+            });
+            document.getElementById('top5Count').textContent = top5Count;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+
+            if (allData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 40px; color: #666;">No alerts yet. Waiting for TradingView signals...</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = allData.map((row, idx) => {
+                const isTop5 = (row.signal === 'LONG' && TOP_5_BULLISH.includes(row.pair)) ||
+                               (row.signal === 'SHORT' && TOP_5_BEARISH.includes(row.pair));
+
+                let rowClass = 'below-minimum';
+                if (row.meets_minimum === 'YES') {
+                    if (row.signal === 'LONG') {
+                        rowClass = isTop5 ? 'top5-bullish' : 'standard-long';
+                    } else {
+                        rowClass = isTop5 ? 'top5-bearish' : 'standard-short';
+                    }
+                }
+
+                const signalBadge = row.signal === 'LONG'
+                    ? '<span class="badge badge-long">LONG</span>'
+                    : '<span class="badge badge-short">SHORT</span>';
+
+                const statusBadge = row.meets_minimum === 'YES'
+                    ? '<span class="badge badge-ok">✓ OK</span>'
+                    : '<span class="badge badge-fail">✗ FAIL</span>';
+
+                const priorityBadge = isTop5 && row.meets_minimum === 'YES'
+                    ? '<span class="badge badge-top5">⭐ TOP 5</span>'
+                    : '-';
+
+                const timestamp = new Date(row.timestamp).toLocaleTimeString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                const entryPrice = parseFloat(row.entry_price || row.close_price).toFixed(5);
+                const slPrice = row.stop_loss ? parseFloat(row.stop_loss).toFixed(5) : '-';
+                const tpPrice = row.take_profit ? parseFloat(row.take_profit).toFixed(5) : '-';
+
+                return \`
+                    <tr class="\${rowClass}">
+                        <td>\${timestamp}</td>
+                        <td><span class="pair-name">\${row.pair}</span></td>
+                        <td>\${signalBadge}</td>
+                        <td>\${row.bias}</td>
+                        <td>\${entryPrice}</td>
+                        <td>\${slPrice}</td>
+                        <td>\${tpPrice}</td>
+                        <td><span class="ratio-highlight">\${parseFloat(row.ratio).toFixed(2)}:1</span></td>
+                        <td>\${statusBadge}</td>
+                        <td>\${priorityBadge}</td>
+                    </tr>
+                \`;
+            }).join('');
+        }
+
+        function filterTable() {
+            const signalFilter = document.getElementById('filterSignal').value;
+            const statusFilter = document.getElementById('filterStatus').value;
+
+            const tbody = document.getElementById('tableBody');
+            const rows = tbody.querySelectorAll('tr');
+
+            rows.forEach(row => {
+                let show = true;
+
+                if (signalFilter) {
+                    const signal = row.textContent.includes('LONG') ? 'LONG' : 'SHORT';
+                    if (signal !== signalFilter) show = false;
+                }
+
+                if (statusFilter) {
+                    const status = row.textContent.includes('OK') ? 'YES' : 'NO';
+                    if (status !== statusFilter) show = false;
+                }
+
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        function updateTimestamp() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-GB');
+            document.getElementById('lastUpdate').textContent = timeString;
+
+            if (allData.length > 0) {
+                document.getElementById('totalEntries').textContent = \`\${allData.length} total alerts logged\`;
+            }
+        }
+
+        // Initialize
+        refreshData();
+        setInterval(refreshData, 5000);
+    </script>
+</body>
+</html>`;
+
 // HTTP Server
 const PORT = process.env.PORT || ENV.PORT || 3000;
 const server = http.createServer(async (req, res) => {
@@ -270,6 +744,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
     res.end();
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(DASHBOARD_HTML);
     return;
   }
 
